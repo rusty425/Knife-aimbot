@@ -1,384 +1,174 @@
--- This file is licensed under the Perl Artistic License. See https://dev.perl.org/licenses/artistic.html for more details.
-local Replicated = game:GetService("ReplicatedStorage")
-local Input = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+local Debris = game:GetService("Debris")
+local Camera = Workspace.CurrentCamera
 local Players = game:GetService("Players")
-local StarterGui = game:GetService("StarterGui")
-local ContextActionService = game:GetService("ContextActionService")
-local CollectionService = game:GetService("CollectionService")
-
-local CollisionGroups = require(Replicated.Modules.CollisionGroups)
-local WeaponRaycast = require(Replicated.Modules.WeaponRaycast)
-local Promise = require(Replicated.Modules.Util.Promise)
-local Maid = require(Replicated.Modules.Util.Maid)
-local CharacterRayOrigin = require(Replicated.Modules.CharacterRayOrigin)
-local KnifeProjectileController = require(Replicated.Modules.KnifeProjectileController)
-local Hitbox = require(Replicated.Modules.Hitbox)
-local Tags = require(Replicated.Modules.Tags)
-
-getgenv().controllers = getgenv().controllers or {
-    knifeLocked = false,
-    gunLocked = false,
-    toolsLocked = false,
-    gunCooldown = 0,
-}
-
-local THROW_ANIMATION_SPEED = 1.4
-local CHARGE_DELAY = 0.25
-local KNIFE_HANDLE_NAME = "RightHandle"
-
-local currentCamera = workspace.CurrentCamera
+local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
-local mouse = player:GetMouse()
-
-local throwAnimation = Replicated.Animations.Throw
-local throwStartRemote = Replicated.Remotes.ThrowStart
-local throwHitRemote = Replicated.Remotes.ThrowHit
-local stabRemote = Replicated.Remotes.Stab
-
-local character
-local isStabMode = false
-local currentThrowPromise = nil
-local currentTool = nil
-local maid = Maid.new()
-
-local hasMouseEnabled = Input.MouseEnabled
-
-local function getKnifeControls()
-    local controls = StarterGui:FindFirstChild("Controls")
-    if not controls then return nil end
-
-    local knifeControl = controls:FindFirstChild("KnifeControl")
-    if not knifeControl then return nil end
-
-    return knifeControl
+do
+	local playerGui = player:WaitForChild("PlayerGui")
+	local transitionGui = Instance.new("ScreenGui")
+	transitionGui.Name = "CinematicTransition"
+	transitionGui.ResetOnSpawn = false
+	transitionGui.IgnoreGuiInset = true -- removes top bar spacing
+	transitionGui.Parent = playerGui
+	local blackFrame = Instance.new("Frame")
+	blackFrame.Size = UDim2.new(1,0,1,0)
+	blackFrame.Position = UDim2.new(0,0,0,0)
+	blackFrame.BackgroundColor3 = Color3.new(0,0,0)
+	blackFrame.BackgroundTransparency = 0 -- start fully black
+	blackFrame.BorderSizePixel = 0
+	blackFrame.Parent = transitionGui
+	-- Optional cinematic letterbox bars
+	local topBar = Instance.new("Frame")
+	topBar.Size = UDim2.new(1,0,0.1,0)
+	topBar.Position = UDim2.new(0,0,0,0)
+	topBar.BackgroundColor3 = Color3.new(0,0,0)
+	topBar.BorderSizePixel = 0
+	topBar.BackgroundTransparency = 0
+	topBar.Parent = transitionGui
+	local bottomBar = Instance.new("Frame")
+	bottomBar.Size = UDim2.new(1,0,0.1,0)
+	bottomBar.Position = UDim2.new(0,0,0.9,0)
+	bottomBar.BackgroundColor3 = Color3.new(0,0,0)
+	bottomBar.BorderSizePixel = 0
+	bottomBar.BackgroundTransparency = 0
+	bottomBar.Parent = transitionGui
+	local tweenInfo = TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+	local fadeOut = TweenService:Create(blackFrame, tweenInfo, {BackgroundTransparency = 1})
+	local topFadeOut = TweenService:Create(topBar, tweenInfo, {BackgroundTransparency = 1})
+	local bottomFadeOut = TweenService:Create(bottomBar, tweenInfo, {BackgroundTransparency = 1})
+	-- Run RTX while black
+	coroutine.wrap(function()
+		wait(0.1) -- small delay to ensure GUI renders
+		-- START THE V6 RTX SCRIPT HERE
+		-- (the rest of your RTX script will execute while screen is black)
+	end)()
+	-- Fade out transition
+	fadeOut:Play()
+	topFadeOut:Play()
+	bottomFadeOut:Play()
+	-- Destroy GUI after fade completes
+	delay(tweenInfo.Time + 0.1, function()
+		transitionGui:Destroy()
+	end)
 end
-
-local function getControlButtons()
-    local knifeControl = getKnifeControls()
-    if not knifeControl then return nil, nil, nil, nil end
-
-    local pcControls = knifeControl:FindFirstChild("PC")
-    local gamepadControls = knifeControl:FindFirstChild("Gamepad")
-
-    local throwButton = pcControls and pcControls:FindFirstChild("Throw")
-    local stabButton = pcControls and pcControls:FindFirstChild("Stab")
-
-    return throwButton, stabButton, pcControls, gamepadControls
+for _,v in pairs(Lighting:GetChildren()) do
+	if v:IsA("PostEffect") or v:IsA("Atmosphere") then
+		v:Destroy()
+	end
 end
-
-local function getThrowDirection(targetPosition, hrpPosition)
-    local screenRayResult = WeaponRaycast(currentCamera.CFrame.Position, targetPosition, nil, CollisionGroups.SCREEN_RAYCAST)
-    local finalTarget = targetPosition
-
-    if screenRayResult and screenRayResult.Position then
-        local worldRayResult = WeaponRaycast(hrpPosition, screenRayResult.Position)
-        if worldRayResult and worldRayResult.Position then
-            finalTarget = worldRayResult.Position
-        else
-            finalTarget = screenRayResult.Position
-        end
-    end
-
-    return (finalTarget - hrpPosition).Unit
+Lighting.Technology = Enum.Technology.Future
+Lighting.GlobalShadows = true
+Lighting.ShadowSoftness = 0.95
+Lighting.Brightness = 3.6
+Lighting.ClockTime = 14.4
+Lighting.ExposureCompensation = 0.28
+Lighting.EnvironmentDiffuseScale = 1
+Lighting.EnvironmentSpecularScale = 1
+Lighting.OutdoorAmbient = Color3.fromRGB(90,90,90)
+Lighting.Ambient = Color3.fromRGB(50,50,50)
+local Bloom = Instance.new("BloomEffect", Lighting)
+Bloom.Intensity = 4
+Bloom.Size = 130
+Bloom.Threshold = 0.65
+local ColorCorrection = Instance.new("ColorCorrectionEffect", Lighting)
+ColorCorrection.Contrast = 0.62
+ColorCorrection.Saturation = 0.35
+ColorCorrection.Brightness = 0.05
+ColorCorrection.TintColor = Color3.fromRGB(255,245,230)
+local SunRays = Instance.new("SunRaysEffect", Lighting)
+SunRays.Intensity = 0.45
+SunRays.Spread = 0.98
+local Blur = Instance.new("BlurEffect", Lighting)
+Blur.Size = 1.8
+local Sky = Instance.new("Sky")
+Sky.SkyboxUp = "rbxassetid://153376888"
+Sky.SkyboxDn = "rbxassetid://153376888"
+Sky.SkyboxLf = "rbxassetid://153376888"
+Sky.SkyboxRt = "rbxassetid://153376888"
+Sky.SkyboxFt = "rbxassetid://153376888"
+Sky.SkyboxBk = "rbxassetid://153376888"
+Sky.Parent = Lighting
+local Sun = Instance.new("DirectionalLight", Workspace)
+Sun.Brightness = 5.2
+Sun.ShadowSoftness = 0.94
+Sun.Color = Color3.fromRGB(255,242,220)
+Sun.CastsShadow = true
+local sunAngle = 0
+RunService.RenderStepped:Connect(function()
+	sunAngle += 0.007
+	local angleX = math.sin(sunAngle)*math.rad(15)
+	local angleY = math.rad(45)
+	Sun.CFrame = CFrame.Angles(angleX,angleY,0)
+	-- adaptive color grading
+	local timeTint = 0.7 + math.sin(sunAngle)*0.3
+	ColorCorrection.TintColor = Color3.fromRGB(255, 245 * timeTint, 220)
+	ColorCorrection.Contrast = 0.55 + math.sin(sunAngle)*0.06
+	ColorCorrection.Saturation = 0.32 + math.sin(sunAngle)*0.03
+end)
+local function UpdateDynamicReflections()
+	local t = tick()
+	for _,part in ipairs(Workspace:GetDescendants()) do
+		if part:IsA("BasePart") then
+			local baseReflect = 0.08 + math.sin(t*0.5 + part.Position.X*0.08)*0.12
+			part.Reflectance = math.clamp(baseReflect,0,0.35)
+			part.CFrame = part.CFrame * CFrame.new(
+				math.sin(t*0.12 + part.Position.X*0.03)*0.001,
+				math.sin(t*0.15 + part.Position.Y*0.03)*0.001,
+				math.sin(t*0.13 + part.Position.Z*0.03)*0.001
+			)
+		end
+	end
 end
-
-local function setKnifeHandleTransparency(tool, transparency)
-    local rightHandle = tool:FindFirstChild(KNIFE_HANDLE_NAME)
-    if not rightHandle then return end
-
-    rightHandle.LocalTransparencyModifier = transparency
-
-    for _, descendant in ipairs(rightHandle:GetDescendants()) do
-        if descendant:IsA("BasePart") then
-            descendant.LocalTransparencyModifier = transparency
-        elseif descendant:IsA("Trail") then
-            descendant.Enabled = transparency < 1
-        end
-    end
+RunService.Heartbeat:Connect(UpdateDynamicReflections)
+local DebrisFolder = Instance.new("Folder", Workspace)
+DebrisFolder.Name = "CinematicDebris"
+local function SpawnCinematicDebris()
+	for i=1,35 do
+		local part = Instance.new("Part")
+		part.Size = Vector3.new(0.05,0.05,0.05)
+		part.Anchored = false
+		part.CanCollide = true
+		part.Material = Enum.Material.SmoothPlastic
+		part.Color = Color3.fromRGB(240,240,240)
+		part.Transparency = 0.7
+		part.CFrame = Camera.CFrame * CFrame.new(
+			math.random(-50,50)/10,
+			math.random(-20,20)/10,
+			math.random(-50,50)/10
+		)
+		part.Velocity = Vector3.new(math.random(-6,6)/5,math.random(-6,6)/5,math.random(-6,6)/5)
+		part.RotVelocity = Vector3.new(math.random(),math.random(),math.random())*2
+		part.Parent = DebrisFolder
+		Debris:AddItem(part,6)
+	end
 end
-
-local function throwKnife(tool, targetPosition, isManualActivation)
-    if getgenv().controllers.knifeLocked or getgenv().controllers.toolsLocked then return end
-    if currentThrowPromise or not tool.Enabled then return end
-
-    local knifeHandle = tool:FindFirstChild(KNIFE_HANDLE_NAME)
-    if not knifeHandle then return end
-
-    local hrpPosition = targetPosition and CharacterRayOrigin(character)
-    local throwDirection
-
-    if targetPosition then
-        throwDirection = getThrowDirection(targetPosition, hrpPosition)
-    end
-
-    local function createKnifeProjectile()
-        if not hrpPosition then
-            hrpPosition = CharacterRayOrigin(character)
-            if not hrpPosition then return end
-        end
-
-        if not throwDirection then
-            throwDirection = getThrowDirection(targetPosition, hrpPosition)
-        end
-
-        setKnifeHandleTransparency(tool, 1)
-        throwStartRemote:FireServer(hrpPosition, throwDirection)
-        KnifeProjectileController({
-            Speed = tool:GetAttribute("ThrowSpeed"),
-            KnifeProjectile = knifeHandle:Clone(),
-            Direction = throwDirection,
-            Origin = hrpPosition,
-        }, function(hitResult)
-            local hitInstance = hitResult and hitResult.Instance
-            local hitPosition = hitResult and hitResult.Position
-            throwHitRemote:FireServer(hitInstance, hitPosition)
-        end)
-    end
-
-    if not hasMouseEnabled then
-        local humanoid = character and character:FindFirstChild("Humanoid")
-        local animator = humanoid and humanoid:FindFirstChild("Animator")
-        if not animator then return end
-
-        local throwAnimationTrack = animator:LoadAnimation(throwAnimation)
-
-        if currentThrowPromise then
-            currentThrowPromise:cancel()
-            currentThrowPromise = nil
-        end
-
-        currentThrowPromise = Promise.new(function(resolve, reject, onCancel)
-            onCancel(function()
-                throwAnimationTrack:Stop(0)
-            end)
-
-            throwAnimationTrack:GetMarkerReachedSignal("Completed"):Connect(function()
-                resolve()
-            end)
-
-            throwAnimationTrack.Ended:Connect(function()
-                setKnifeHandleTransparency(tool, 0)
-                currentThrowPromise = nil
-                throwAnimationTrack:Destroy()
-            end)
-
-            throwAnimationTrack:Play(nil, nil, THROW_ANIMATION_SPEED)
-        end):andThen(function()
-            createKnifeProjectile()
-        end)
-
-        maid:GiveTask(function()
-            if currentThrowPromise then
-                currentThrowPromise:cancel()
-            end
-        end)
-    else
-        createKnifeProjectile()
-    end
-end
-
-local function handleStabInput(tool)
-    local hitTargets = {}
-
-    local hitboxController = Hitbox(tool, function(hitResult)
-        local hitCharacter = hitResult.Instance.Parent
-        local targetHumanoid = hitCharacter and hitCharacter:FindFirstChild("Humanoid")
-
-        if not targetHumanoid or hitTargets[hitCharacter] then return end
-
-        hitTargets[hitCharacter] = true
-        stabRemote:FireServer(hitResult.Instance)
-    end)
-
-    maid:GiveTask(tool:GetAttributeChangedSignal("IsActivated"):Connect(function()
-        if tool:GetAttribute("IsActivated") then
-            hitboxController.Activate()
-        else
-            hitTargets = {}
-            hitboxController.Deactivate()
-        end
-    end))
-
-    maid:GiveTask(tool.Activated:Connect(function()
-        if getgenv().controllers.knifeLocked or getgenv().controllers.toolsLocked then return end
-
-        if isStabMode then
-            hitboxController.Activate()
-            wait(0.1)
-            hitboxController.Deactivate()
-            hitTargets = {}
-        end
-    end))
-
-    maid:GiveTask(function()
-        hitboxController.Deactivate()
-    end)
-end
-
-local function handleMouseThrowInput(tool)
-    local humanoid = character and character:FindFirstChild("Humanoid")
-    local animator = humanoid and humanoid:FindFirstChild("Animator")
-    if not animator then return end
-
-    local chargeAnimationTrack = animator:LoadAnimation(throwAnimation)
-    local isCharged = false
-    local chargePromise = nil
-
-    maid:GiveTask(chargeAnimationTrack:GetMarkerReachedSignal("Completed"):Connect(function()
-        isCharged = true
-        chargeAnimationTrack:AdjustSpeed(0)
-    end))
-
-    maid:GiveTask(chargeAnimationTrack.Ended:Connect(function()
-        isCharged = false
-        setKnifeHandleTransparency(tool, 0)
-    end))
-
-    maid:GiveTask(Input.InputBegan:Connect(function(input, gameProcessed)
-        if gameProcessed
-            or input.UserInputType ~= Enum.UserInputType.MouseButton1
-            or chargeAnimationTrack.IsPlaying
-            or isCharged
-            or isStabMode then
-            return
-        end
-
-        chargePromise = Promise.delay(CHARGE_DELAY):andThen(function()
-            chargeAnimationTrack:Play(nil, nil, THROW_ANIMATION_SPEED)
-        end)
-    end))
-
-    maid:GiveTask(Input.InputEnded:Connect(function(input)
-        if input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
-
-        if isStabMode then
-            tool:Activate()
-            return
-        end
-
-        if not chargePromise then return end
-
-        chargePromise:cancel()
-        chargePromise = nil
-
-        if not chargeAnimationTrack.IsPlaying or not isCharged then
-            chargeAnimationTrack:Stop()
-            task.wait()
-            tool:Activate()
-            return
-        end
-
-        chargeAnimationTrack:AdjustSpeed(1)
-        throwKnife(tool, mouse.Hit.Position)
-    end))
-
-    maid:GiveTask(function()
-        if chargePromise then
-            chargePromise:cancel()
-        end
-        chargeAnimationTrack:Stop()
-        setKnifeHandleTransparency(tool, 0)
-    end)
-end
-
-local function setupUIConnections(tool)
-    local throwButton, stabButton, pcControls, gamepadControls = getControlButtons()
-
-    if throwButton then
-        maid:GiveTask(throwButton.MouseButton1Click:Connect(function()
-            throwKnife(tool, mouse.Hit.Position, true)
-        end))
-    end
-
-    if stabButton then
-        maid:GiveTask(stabButton.MouseButton1Click:Connect(function()
-            tool:Activate()
-        end))
-    end
-
-    if gamepadControls then
-        local gamepadThrow = gamepadControls:FindFirstChild("Throw")
-        local gamepadStab = gamepadControls:FindFirstChild("Stab")
-
-        if gamepadThrow then
-            maid:GiveTask(gamepadThrow.MouseButton1Click:Connect(function()
-                throwKnife(tool, mouse.Hit.Position, true)
-            end))
-        end
-
-        if gamepadStab then
-            maid:GiveTask(gamepadStab.MouseButton1Click:Connect(function()
-                tool:Activate()
-            end))
-        end
-    end
-end
-
-local function handleThrowInput(tool)
-    setupUIConnections(tool)
-
-    if hasMouseEnabled and Input.MouseEnabled then
-        tool.ManualActivationOnly = true
-        handleMouseThrowInput(tool)
-    else
-        ContextActionService:BindAction("Throw", function(actionName, inputState)
-            if actionName == "Throw" and inputState == Enum.UserInputState.Begin then
-                if isStabMode then
-                    tool:Activate()
-                else
-                    throwKnife(tool, nil, true)
-                end
-            end
-        end, false, Enum.KeyCode.E, Enum.KeyCode.ButtonL2)
-
-        maid:GiveTask(function()
-            ContextActionService:UnbindAction("Throw")
-        end)
-    end
-
-    maid:GiveTask(Input.TouchTapInWorld:Connect(function(position, gameProcessed)
-        if gameProcessed then return end
-
-        if isStabMode then
-            tool:Activate()
-        else
-            local worldPosition = WeaponRaycast.convertScreenPointToVector3(position, 2000)
-            throwKnife(tool, worldPosition)
-        end
-    end))
-end
-
-local function onKnifeEquipped(tool)
-    maid:DoCleaning()
-    currentTool = tool
-    tool.ManualActivationOnly = isStabMode
-
-    maid:GiveTask(function()
-        currentTool = nil
-    end)
-
-    handleStabInput(tool)
-    handleThrowInput(tool)
-
-    maid:GiveTask(tool.AncestryChanged:Connect(function()
-        if not tool:IsDescendantOf(character) then
-            maid:DoCleaning()
-        end
-    end))
-end
-
-return player.CharacterAdded:Connect(function(new)
-    character = new
-
-    character.ChildAdded:Connect(function(child)
-        if child:IsA("Tool") and CollectionService:HasTag(child, Tags.KNIFE_TOOL) then
-            onKnifeEquipped(child)
-        end
-    end)
-
-    for _, child in ipairs(character:GetChildren()) do
-        if child:IsA("Tool") and CollectionService:HasTag(child, Tags.KNIFE_TOOL) then
-            onKnifeEquipped(child)
-        end
-    end
+RunService.Heartbeat:Connect(SpawnCinematicDebris)
+local camTimer = 0
+RunService.RenderStepped:Connect(function(dt)
+	camTimer += dt
+	Camera.FieldOfView = 70 + math.sin(tick()*0.85)*0.12
+	local roll = math.sin(tick()*0.3)*0.004
+	local pitch = math.cos(tick()*0.25)*0.004
+	local yaw = math.sin(tick()*0.2)*0.003
+	Camera.CFrame = Camera.CFrame * CFrame.Angles(pitch, yaw, roll)
+end)
+local flarePart = Instance.new("Part", Workspace)
+flarePart.Size = Vector3.new(1,1,1)
+flarePart.Transparency = 1
+flarePart.Anchored = true
+flarePart.CanCollide = false
+flarePart.Position = Camera.CFrame.Position + Vector3.new(0,50,0)
+local flare = Instance.new("ParticleEmitter", flarePart)
+flare.Texture = "rbxassetid://4805638932"
+flare.Rate = 25
+flare.Lifetime = NumberRange.new(2)
+flare.Speed = NumberRange.new(0)
+flare.Size = NumberSequence.new(2.4)
+flare.Transparency = NumberSequence.new(0.5)
+flare.LightEmission = 1
+RunService.RenderStepped:Connect(function()
+	flarePart.Position = Camera.CFrame.Position + Vector3.new(0,50,0)
 end)
