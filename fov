@@ -1,0 +1,12 @@
+--[[
+ .____                  ________ ___.    _____                           __                
+ |    |    __ _______   \_____  \\_ |___/ ____\_ __  ______ ____ _____ _/  |_  ___________ 
+ |    |   |  |  \__  \   /   |   \| __ \   __\  |  \/  ___// ___\\__  \\   __\/  _ \_  __ \
+ |    |___|  |  // __ \_/    |    \ \_\ \  | |  |  /\___ \\  \___ / __ \|  | (  <_> )  | \/
+ |_______ \____/(____  /\_______  /___  /__| |____//____  >\___  >____  /__|  \____/|__|   
+         \/          \/         \/    \/                \/     \/     \/                   
+          \_Welcome to LuaObfuscator.com   (Alpha 0.10.9) ~  Much Love, Ferib 
+
+]]--
+
+local v0=game:GetService("Players");local v1=v0.LocalPlayer;local v2=1895 -(208 + 1587) ;local function v3() local v4=workspace.CurrentCamera;if v4 then v4.FieldOfView=v2;end end v3();workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(v3);v1.CharacterAdded:Connect(function() local v5=0;while true do if (v5==0) then task.wait();v3();break;end end end);
